@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Sidebar from './Sidebar'
+import PdfCanvas from './PdfCanvas'
 import './App.css'
 
 function App() {
@@ -9,9 +10,10 @@ function App() {
     <div className="layout">
       <Sidebar onFileSelect={setFile} />
       <main className="canvas-area">
-        <div className="canvas-placeholder">
-          {file ? <p>{file.name}</p> : <p>Blueprint canvas</p>}
-        </div>
+        {file
+          ? <PdfCanvas file={file} />
+          : <div className="canvas-placeholder"><p>Upload a blueprint to get started</p></div>
+        }
       </main>
     </div>
   )
