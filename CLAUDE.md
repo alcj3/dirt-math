@@ -1,4 +1,4 @@
-# landcalc
+# dirt math
 
 A browser-based tool for measuring landscaping blueprints and calculating material quantities. Supports both manual measurement and AI-powered automatic zone detection.
 

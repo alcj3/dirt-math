@@ -1,13 +1,16 @@
+import { useState } from 'react'
 import Sidebar from './Sidebar'
 import './App.css'
 
 function App() {
+  const [file, setFile] = useState(null)
+
   return (
     <div className="layout">
-      <Sidebar />
+      <Sidebar onFileSelect={setFile} />
       <main className="canvas-area">
         <div className="canvas-placeholder">
-          <p>Blueprint canvas</p>
+          {file ? <p>{file.name}</p> : <p>Blueprint canvas</p>}
         </div>
       </main>
     </div>
