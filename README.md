@@ -1,16 +1,32 @@
-# React + Vite
+# dirt-math
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A browser-based tool for measuring landscaping blueprint PDFs — calibrate scale, draw zones, and compute real-world area.
 
-Currently, two official plugins are available:
+Deployed Link: https://dirt-math.vercel.app
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What it does
 
-## React Compiler
+1. **Upload a blueprint (PDF)** — renders in the browser, no server needed
+2. **Calibrate scale** — draw a line over a known distance, enter the real-world length in ft / in / yd / m
+3. **Draw zones** — click points to create polygons over areas you want to measure
+4. **Get area per zone** — each zone shows its area in your chosen unit once calibrated
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+<img width="1503" height="846" alt="Screenshot 2026-03-25 at 3 05 07 PM" src="https://github.com/user-attachments/assets/b2cd21ac-209b-4af4-a564-96cd1050b3de" />
 
-## Expanding the ESLint configuration
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## Stack
+
+- React + Vite
+- PDF.js for blueprint rendering
+- Plain CSS
+
+## Why I built this
+
+Built for my dad's landscaping business to replace manual ruler measurements on blueprint printouts. 
+## What's next
+
+- Save/load projects
+- Multi-page blueprint support
+- Materials calculator (mulch, sod, gravel quantities)
+- AI-powered automatic zone detection
