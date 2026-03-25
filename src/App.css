@@ -131,6 +131,12 @@
   background: var(--border);
 }
 
+.btn-secondary.active {
+  background: var(--text-strong);
+  color: var(--bg);
+  border-color: var(--text-strong);
+}
+
 .btn-ghost {
   width: 100%;
   padding: 6px 12px;
@@ -144,6 +150,70 @@
 }
 
 .btn-ghost:hover {
+  color: var(--text-strong);
+}
+
+/* Zone list */
+
+.zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.zone-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.zone-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1.5px solid;
+  flex-shrink: 0;
+}
+
+.zone-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.zone-name {
+  font-size: 13px;
+  color: var(--text-strong);
+  font-weight: 500;
+}
+
+.zone-area {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.zone-area.muted {
+  font-style: italic;
+}
+
+.zone-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.zone-delete:hover {
   color: var(--text-strong);
 }
 
@@ -185,9 +255,8 @@
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2);
 }
 
-.calibration-overlay {
+.drawing-overlay {
   position: absolute;
   top: 0;
   left: 0;
-  cursor: crosshair;
 }

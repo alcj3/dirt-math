@@ -9,13 +9,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 const MIN_ZOOM = 0.25
 const MAX_ZOOM = 8
 const INITIAL_PAN = { x: 24, y: 24 }
+// Snap radius in screen pixels — converted to canvas-space on use
+const SNAP_SCREEN_PX = 14
 
-function PdfCanvas({ file, calibrating, onLineDrawn }) {
+function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activePoints, onPointAdd, onZoneClose }) {
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
 
-  // Use refs for transform so wheel/drag handlers never have stale values
+  // Refs for transform so event handlers always have current values
   const zoomRef = useRef(1)
   const panRef = useRef(INITIAL_PAN)
   const [renderTransform, setRenderTransform] = useState({ zoom: 1, pan: INITIAL_PAN })
@@ -26,20 +28,19 @@ function PdfCanvas({ file, calibrating, onLineDrawn }) {
     setRenderTransform({ zoom, pan })
   }
 
-  // Calibration line state
-  const [line, setLine] = useState(null)
-  const drawing = useRef(false)
+  // Calibration line
+  const [calibLine, setCalibLine] = useState(null)
+  const calibDrawing = useRef(false)
 
-  // Pan drag state
+  // Zone drawing cursor preview
+  const [cursorPos, setCursorPos] = useState(null)
+
+  // Pan
   const dragging = useRef(false)
   const lastMouse = useRef({ x: 0, y: 0 })
 
-  // Reset zoom/pan when a new file is loaded
-  useEffect(() => {
-    applyTransform(1, INITIAL_PAN)
-  }, [file])
+  useEffect(() => { applyTransform(1, INITIAL_PAN) }, [file])
 
-  // Render PDF
   useEffect(() => {
     if (!file) return
     let cancelled = false
@@ -69,37 +70,32 @@ function PdfCanvas({ file, calibrating, onLineDrawn }) {
     return () => { cancelled = true }
   }, [file])
 
-  // Clear calibration line when a new calibration session starts
   useEffect(() => {
-    if (calibrating) setLine(null)
+    if (calibrating) setCalibLine(null)
   }, [calibrating])
 
-  // Wheel zoom — must use addEventListener to pass { passive: false }
+  // Wheel zoom — must be non-passive to call preventDefault
   useEffect(() => {
     const container = containerRef.current
-
     function handleWheel(e) {
       e.preventDefault()
       const rect = container.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
-
       const factor = Math.pow(0.999, e.deltaY)
       const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoomRef.current * factor))
-      const newPan = {
+      applyTransform(newZoom, {
         x: mx - (mx - panRef.current.x) * (newZoom / zoomRef.current),
         y: my - (my - panRef.current.y) * (newZoom / zoomRef.current),
-      }
-      applyTransform(newZoom, newPan)
+      })
     }
-
     container.addEventListener('wheel', handleWheel, { passive: false })
     return () => container.removeEventListener('wheel', handleWheel)
   }, [])
 
-  // Pan — mouse drag on the container
+  // Container mouse handlers (pan only — disabled while drawing)
   function handleContainerMouseDown(e) {
-    if (calibrating) return
+    if (calibrating || drawingZone) return
     dragging.current = true
     lastMouse.current = { x: e.clientX, y: e.clientY }
     containerRef.current.style.cursor = 'grabbing'
@@ -110,18 +106,18 @@ function PdfCanvas({ file, calibrating, onLineDrawn }) {
     const dx = e.clientX - lastMouse.current.x
     const dy = e.clientY - lastMouse.current.y
     lastMouse.current = { x: e.clientX, y: e.clientY }
-    const newPan = { x: panRef.current.x + dx, y: panRef.current.y + dy }
-    applyTransform(zoomRef.current, newPan)
+    applyTransform(zoomRef.current, { x: panRef.current.x + dx, y: panRef.current.y + dy })
   }
 
   function stopDrag() {
     if (!dragging.current) return
     dragging.current = false
-    if (containerRef.current) containerRef.current.style.cursor = 'grab'
+    if (containerRef.current) {
+      containerRef.current.style.cursor = drawingZone ? 'crosshair' : calibrating ? 'default' : 'grab'
+    }
   }
 
-  // Calibration line drawing on the SVG overlay
-  // Dividing by zoom converts from screen-space to canvas-space coordinates
+  // Convert screen coords to canvas-space coords via the SVG's transformed bounding rect
   function getSVGCoords(e) {
     const rect = e.currentTarget.getBoundingClientRect()
     return {
@@ -130,45 +126,75 @@ function PdfCanvas({ file, calibrating, onLineDrawn }) {
     }
   }
 
-  function handleSVGMouseDown(e) {
+  // Calibration handlers
+  function handleCalibMouseDown(e) {
     e.stopPropagation()
     const { x, y } = getSVGCoords(e)
-    setLine({ x1: x, y1: y, x2: x, y2: y })
-    drawing.current = true
+    setCalibLine({ x1: x, y1: y, x2: x, y2: y })
+    calibDrawing.current = true
   }
 
-  function handleSVGMouseMove(e) {
-    if (!drawing.current) return
+  function handleCalibMouseUp(e) {
+    if (!calibDrawing.current) return
+    calibDrawing.current = false
     const { x, y } = getSVGCoords(e)
-    setLine(prev => prev ? { ...prev, x2: x, y2: y } : null)
-  }
-
-  function handleSVGMouseUp(e) {
-    if (!drawing.current) return
-    drawing.current = false
-    const { x, y } = getSVGCoords(e)
-    setLine(prev => {
+    setCalibLine(prev => {
       if (!prev) return null
       const final = { ...prev, x2: x, y2: y }
-      const dx = final.x2 - final.x1
-      const dy = final.y2 - final.y1
-      const lengthPx = Math.sqrt(dx * dx + dy * dy)
-      if (lengthPx > 5) onLineDrawn(lengthPx)
+      const dx = final.x2 - final.x1, dy = final.y2 - final.y1
+      const len = Math.sqrt(dx * dx + dy * dy)
+      if (len > 5) onLineDrawn(len)
       return final
     })
   }
 
+  // SVG mousemove — used for calib drag and zone cursor preview
+  function handleSVGMouseMove(e) {
+    const { x, y } = getSVGCoords(e)
+    if (calibrating && calibDrawing.current) {
+      setCalibLine(prev => prev ? { ...prev, x2: x, y2: y } : null)
+    }
+    if (drawingZone) {
+      setCursorPos({ x, y })
+    }
+  }
+
+  // Zone drawing click
+  function handleZoneClick(e) {
+    const { x, y } = getSVGCoords(e)
+    if (activePoints.length >= 3) {
+      const first = activePoints[0]
+      const dx = x - first.x, dy = y - first.y
+      if (Math.sqrt(dx * dx + dy * dy) <= SNAP_SCREEN_PX / zoomRef.current) {
+        onZoneClose()
+        return
+      }
+    }
+    onPointAdd({ x, y })
+  }
+
   const { zoom, pan } = renderTransform
+  const snapRadius = SNAP_SCREEN_PX / zoom
+
+  // Is cursor near the first zone point (to show snap indicator)?
+  const nearFirst = drawingZone && activePoints.length >= 3 && cursorPos && (() => {
+    const f = activePoints[0]
+    const dx = cursorPos.x - f.x, dy = cursorPos.y - f.y
+    return Math.sqrt(dx * dx + dy * dy) <= snapRadius
+  })()
+
   const wrapperStyle = {
     transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
     transformOrigin: 'top left',
   }
 
+  const svgActive = calibrating || drawingZone
+
   return (
     <div
       ref={containerRef}
       className="pdf-canvas-container"
-      style={{ cursor: calibrating ? 'default' : 'grab' }}
+      style={{ cursor: drawingZone ? 'crosshair' : calibrating ? 'default' : 'grab' }}
       onMouseDown={handleContainerMouseDown}
       onMouseMove={handleContainerMouseMove}
       onMouseUp={stopDrag}
@@ -176,27 +202,86 @@ function PdfCanvas({ file, calibrating, onLineDrawn }) {
     >
       <div className="canvas-wrapper" style={wrapperStyle}>
         <canvas ref={canvasRef} />
-        {calibrating && (
-          <svg
-            className="calibration-overlay"
-            width={canvasSize.width}
-            height={canvasSize.height}
-            onMouseDown={handleSVGMouseDown}
-            onMouseMove={handleSVGMouseMove}
-            onMouseUp={handleSVGMouseUp}
-          >
-            {line && (
-              <>
-                <line
-                  x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2}
-                  stroke="#f59e0b" strokeWidth={2 / zoom} strokeLinecap="round"
-                />
-                <circle cx={line.x1} cy={line.y1} r={5 / zoom} fill="#f59e0b" />
-                <circle cx={line.x2} cy={line.y2} r={5 / zoom} fill="#f59e0b" />
-              </>
-            )}
-          </svg>
-        )}
+
+        <svg
+          className="drawing-overlay"
+          width={canvasSize.width}
+          height={canvasSize.height}
+          style={{ pointerEvents: svgActive ? 'all' : 'none', cursor: svgActive ? 'crosshair' : 'default' }}
+          onMouseDown={calibrating ? handleCalibMouseDown : undefined}
+          onMouseMove={svgActive ? handleSVGMouseMove : undefined}
+          onMouseUp={calibrating ? handleCalibMouseUp : undefined}
+          onClick={drawingZone ? handleZoneClick : undefined}
+          onMouseLeave={() => setCursorPos(null)}
+        >
+          {/* Completed zones */}
+          {zones.map(zone => (
+            <polygon
+              key={zone.id}
+              points={zone.points.map(p => `${p.x},${p.y}`).join(' ')}
+              fill={zone.fill}
+              stroke={zone.stroke}
+              strokeWidth={1.5 / zoom}
+              strokeLinejoin="round"
+            />
+          ))}
+
+          {/* Active zone being drawn */}
+          {activePoints.length > 1 && (
+            <polyline
+              points={activePoints.map(p => `${p.x},${p.y}`).join(' ')}
+              fill="none"
+              stroke="white"
+              strokeWidth={1.5 / zoom}
+              strokeDasharray={`${6 / zoom},${3 / zoom}`}
+              strokeLinecap="round"
+            />
+          )}
+          {activePoints.length > 0 && cursorPos && (
+            <line
+              x1={activePoints[activePoints.length - 1].x}
+              y1={activePoints[activePoints.length - 1].y}
+              x2={cursorPos.x} y2={cursorPos.y}
+              stroke="rgba(255,255,255,0.5)"
+              strokeWidth={1.5 / zoom}
+              strokeDasharray={`${6 / zoom},${3 / zoom}`}
+              strokeLinecap="round"
+            />
+          )}
+          {/* Snap ring on first point when cursor is close */}
+          {nearFirst && (
+            <circle
+              cx={activePoints[0].x} cy={activePoints[0].y}
+              r={snapRadius}
+              fill="rgba(255,255,255,0.15)"
+              stroke="white"
+              strokeWidth={1.5 / zoom}
+            />
+          )}
+          {/* Point dots */}
+          {activePoints.map((p, i) => (
+            <circle
+              key={i}
+              cx={p.x} cy={p.y}
+              r={(i === 0 && nearFirst ? 6 : 4) / zoom}
+              fill="white"
+              stroke="rgba(0,0,0,0.4)"
+              strokeWidth={1 / zoom}
+            />
+          ))}
+
+          {/* Calibration line */}
+          {calibLine && (
+            <>
+              <line
+                x1={calibLine.x1} y1={calibLine.y1} x2={calibLine.x2} y2={calibLine.y2}
+                stroke="#f59e0b" strokeWidth={2 / zoom} strokeLinecap="round"
+              />
+              <circle cx={calibLine.x1} cy={calibLine.y1} r={5 / zoom} fill="#f59e0b" />
+              <circle cx={calibLine.x2} cy={calibLine.y2} r={5 / zoom} fill="#f59e0b" />
+            </>
+          )}
+        </svg>
       </div>
     </div>
   )
