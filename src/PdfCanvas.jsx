@@ -130,6 +130,15 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
     onPageChange?.()
   }
 
+  function jumpToPage(value) {
+    const n = parseInt(value, 10)
+    if (isNaN(n)) return
+    const clamped = Math.min(numPages, Math.max(1, n))
+    setPageNum(clamped)
+    setRotation(0)
+    onPageChange?.()
+  }
+
   function rotatePage() {
     setRotation(r => (r + 90) % 360)
   }
@@ -294,7 +303,17 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
           {numPages > 1 && (
             <>
               <button onClick={goToPrevPage} disabled={pageNum <= 1} className="page-nav-btn">&#8592;</button>
-              <span className="page-nav-label">{pageNum} / {numPages}</span>
+              <input
+                className="page-nav-input"
+                type="number"
+                min={1}
+                max={numPages}
+                defaultValue={pageNum}
+                key={pageNum}
+                onKeyDown={e => { if (e.key === 'Enter') { jumpToPage(e.target.value); e.target.blur() } }}
+                onBlur={e => jumpToPage(e.target.value)}
+              />
+              <span className="page-nav-label">/ {numPages}</span>
               <button onClick={goToNextPage} disabled={pageNum >= numPages} className="page-nav-btn">&#8594;</button>
               <span className="page-nav-divider" />
             </>

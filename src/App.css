@@ -298,10 +298,33 @@
   color: #ccc;
 }
 
+.page-nav-input {
+  width: 36px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 13px;
+  text-align: center;
+  padding: 1px 2px;
+  -moz-appearance: textfield;
+}
+
+.page-nav-input::-webkit-inner-spin-button,
+.page-nav-input::-webkit-outer-spin-button {
+  display: none;
+}
+
+.page-nav-input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
 .page-nav-label {
   font-size: 13px;
-  min-width: 48px;
-  text-align: center;
+  min-width: 24px;
+  text-align: left;
 }
 
 .page-nav-divider {
