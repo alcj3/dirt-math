@@ -146,7 +146,15 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
       const rect = container.getBoundingClientRect()
       const mx = e.clientX - rect.left
       const my = e.clientY - rect.top
-      const factor = Math.pow(0.999, e.deltaY)
+      // Normalize deltaY across deltaMode: mice can report in pixels (mode 0, ~100/notch),
+      // lines (mode 1, ~3/notch), or pages (mode 2, ~1/notch). Convert everything to a
+      // pixel-equivalent so zoom speed is consistent between trackpads and scroll wheels.
+      let delta = e.deltaY
+      if (e.deltaMode === 1) delta *= 20   // lines → pixels
+      if (e.deltaMode === 2) delta *= 400  // pages → pixels
+      // Cap per-event delta so a single mouse notch never causes a huge jump
+      delta = Math.max(-100, Math.min(100, delta))
+      const factor = Math.pow(0.999, delta)
       const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoomRef.current * factor))
       applyTransform(newZoom, {
         x: mx - (mx - panRef.current.x) * (newZoom / zoomRef.current),
