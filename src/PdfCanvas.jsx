@@ -26,6 +26,7 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
   const pdfDocRef = useRef(null)
   const [pageNum, setPageNum] = useState(1)
   const [numPages, setNumPages] = useState(0)
+  const [rotation, setRotation] = useState(0)
 
   function applyTransform(zoom, pan) {
     zoomRef.current = zoom
@@ -44,11 +45,12 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
   const dragging = useRef(false)
   const lastMouse = useRef({ x: 0, y: 0 })
 
-  // Reset transform and page when file changes
+  // Reset transform, page, and rotation when file changes
   useEffect(() => {
     applyTransform(1, INITIAL_PAN)
     setPageNum(1)
     setNumPages(0)
+    setRotation(0)
     pdfDocRef.current = null
   }, [file])
 
@@ -70,7 +72,7 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
     return () => { cancelled = true }
   }, [file])
 
-  // Render current page whenever doc or pageNum changes
+  // Render current page whenever doc, pageNum, or rotation changes
   useEffect(() => {
     if (!pdfDocRef.current || numPages === 0) return
     let cancelled = false
@@ -80,9 +82,9 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
       if (cancelled) return
 
       const containerWidth = containerRef.current.clientWidth
-      const viewport = page.getViewport({ scale: 1 })
+      const viewport = page.getViewport({ scale: 1, rotation })
       const scale = containerWidth / viewport.width
-      const scaledViewport = page.getViewport({ scale })
+      const scaledViewport = page.getViewport({ scale, rotation })
 
       const canvas = canvasRef.current
       canvas.width = scaledViewport.width
@@ -94,18 +96,24 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
 
     renderPage()
     return () => { cancelled = true }
-  }, [pageNum, numPages])
+  }, [pageNum, numPages, rotation])
 
   function goToPrevPage() {
     if (pageNum <= 1) return
     setPageNum(p => p - 1)
+    setRotation(0)
     onPageChange?.()
   }
 
   function goToNextPage() {
     if (pageNum >= numPages) return
     setPageNum(p => p + 1)
+    setRotation(0)
     onPageChange?.()
+  }
+
+  function rotatePage() {
+    setRotation(r => (r + 90) % 360)
   }
 
   useEffect(() => {
@@ -238,11 +246,17 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
       onMouseUp={stopDrag}
       onMouseLeave={stopDrag}
     >
-      {numPages > 1 && (
+      {numPages > 0 && (
         <div className="page-nav">
-          <button onClick={goToPrevPage} disabled={pageNum <= 1} className="page-nav-btn">&#8592;</button>
-          <span className="page-nav-label">{pageNum} / {numPages}</span>
-          <button onClick={goToNextPage} disabled={pageNum >= numPages} className="page-nav-btn">&#8594;</button>
+          {numPages > 1 && (
+            <>
+              <button onClick={goToPrevPage} disabled={pageNum <= 1} className="page-nav-btn">&#8592;</button>
+              <span className="page-nav-label">{pageNum} / {numPages}</span>
+              <button onClick={goToNextPage} disabled={pageNum >= numPages} className="page-nav-btn">&#8594;</button>
+              <span className="page-nav-divider" />
+            </>
+          )}
+          <button onClick={rotatePage} className="page-nav-btn" title="Rotate 90°">&#8635;</button>
         </div>
       )}
       <div className="canvas-wrapper" style={wrapperStyle}>
