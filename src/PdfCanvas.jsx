@@ -12,7 +12,7 @@ const INITIAL_PAN = { x: 24, y: 24 }
 // Snap radius in screen pixels — converted to canvas-space on use
 const SNAP_SCREEN_PX = 14
 
-function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activePoints, onPointAdd, onZoneClose }) {
+function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activePoints, onPointAdd, onZoneClose, onPageChange }) {
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
@@ -21,6 +21,11 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
   const zoomRef = useRef(1)
   const panRef = useRef(INITIAL_PAN)
   const [renderTransform, setRenderTransform] = useState({ zoom: 1, pan: INITIAL_PAN })
+
+  // PDF document and page state
+  const pdfDocRef = useRef(null)
+  const [pageNum, setPageNum] = useState(1)
+  const [numPages, setNumPages] = useState(0)
 
   function applyTransform(zoom, pan) {
     zoomRef.current = zoom
@@ -39,18 +44,39 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
   const dragging = useRef(false)
   const lastMouse = useRef({ x: 0, y: 0 })
 
-  useEffect(() => { applyTransform(1, INITIAL_PAN) }, [file])
+  // Reset transform and page when file changes
+  useEffect(() => {
+    applyTransform(1, INITIAL_PAN)
+    setPageNum(1)
+    setNumPages(0)
+    pdfDocRef.current = null
+  }, [file])
 
+  // Load PDF document once when file changes
   useEffect(() => {
     if (!file) return
     let cancelled = false
 
-    async function render() {
+    async function loadDoc() {
       const arrayBuffer = await file.arrayBuffer()
       if (cancelled) return
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
       if (cancelled) return
-      const page = await pdf.getPage(1)
+      pdfDocRef.current = pdf
+      setNumPages(pdf.numPages)
+    }
+
+    loadDoc()
+    return () => { cancelled = true }
+  }, [file])
+
+  // Render current page whenever doc or pageNum changes
+  useEffect(() => {
+    if (!pdfDocRef.current || numPages === 0) return
+    let cancelled = false
+
+    async function renderPage() {
+      const page = await pdfDocRef.current.getPage(pageNum)
       if (cancelled) return
 
       const containerWidth = containerRef.current.clientWidth
@@ -66,9 +92,21 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
       await page.render({ canvasContext: canvas.getContext('2d'), viewport: scaledViewport }).promise
     }
 
-    render()
+    renderPage()
     return () => { cancelled = true }
-  }, [file])
+  }, [pageNum, numPages])
+
+  function goToPrevPage() {
+    if (pageNum <= 1) return
+    setPageNum(p => p - 1)
+    onPageChange?.()
+  }
+
+  function goToNextPage() {
+    if (pageNum >= numPages) return
+    setPageNum(p => p + 1)
+    onPageChange?.()
+  }
 
   useEffect(() => {
     if (calibrating) setCalibLine(null)
@@ -200,6 +238,13 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
       onMouseUp={stopDrag}
       onMouseLeave={stopDrag}
     >
+      {numPages > 1 && (
+        <div className="page-nav">
+          <button onClick={goToPrevPage} disabled={pageNum <= 1} className="page-nav-btn">&#8592;</button>
+          <span className="page-nav-label">{pageNum} / {numPages}</span>
+          <button onClick={goToNextPage} disabled={pageNum >= numPages} className="page-nav-btn">&#8594;</button>
+        </div>
+      )}
       <div className="canvas-wrapper" style={wrapperStyle}>
         <canvas ref={canvasRef} />
 

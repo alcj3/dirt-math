@@ -80,6 +80,15 @@ function App() {
     })
   }
 
+  function handlePageChange() {
+    setZones([])
+    setCalibrating(false)
+    setCalibrationLinePx(null)
+    setPixelsPerFoot(null)
+    setDrawingZone(false)
+    setActivePoints([])
+  }
+
   return (
     <div className="layout">
       <Sidebar
@@ -108,6 +117,7 @@ function App() {
               activePoints={activePoints}
               onPointAdd={addPoint}
               onZoneClose={closeZone}
+              onPageChange={handlePageChange}
             />
           : <div className="canvas-placeholder"><p>Upload a blueprint to get started</p></div>
         }
