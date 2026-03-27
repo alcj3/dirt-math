@@ -320,7 +320,7 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
             <polyline
               points={activePoints.map(p => `${p.x},${p.y}`).join(' ')}
               fill="none"
-              stroke="white"
+              stroke="#f97316"
               strokeWidth={1.5 / zoom}
               strokeDasharray={`${6 / zoom},${3 / zoom}`}
               strokeLinecap="round"
@@ -331,7 +331,7 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
               x1={activePoints[activePoints.length - 1].x}
               y1={activePoints[activePoints.length - 1].y}
               x2={cursorPos.x} y2={cursorPos.y}
-              stroke="rgba(255,255,255,0.5)"
+              stroke="rgba(249,115,22,0.6)"
               strokeWidth={1.5 / zoom}
               strokeDasharray={`${6 / zoom},${3 / zoom}`}
               strokeLinecap="round"
@@ -342,8 +342,8 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
             <circle
               cx={activePoints[0].x} cy={activePoints[0].y}
               r={snapRadius}
-              fill="rgba(255,255,255,0.15)"
-              stroke="white"
+              fill="rgba(249,115,22,0.15)"
+              stroke="#f97316"
               strokeWidth={1.5 / zoom}
             />
           )}
