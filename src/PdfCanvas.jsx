@@ -323,7 +323,7 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
               key={i}
               cx={p.x} cy={p.y}
               r={(i === 0 && nearFirst ? 6 : 4) / zoom}
-              fill="white"
+              fill="#f97316"
               stroke="rgba(0,0,0,0.4)"
               strokeWidth={1 / zoom}
             />
