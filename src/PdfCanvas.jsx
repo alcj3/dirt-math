@@ -20,7 +20,14 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
   // Refs for transform so event handlers always have current values
   const zoomRef = useRef(1)
   const panRef = useRef(INITIAL_PAN)
-  const [renderTransform, setRenderTransform] = useState({ zoom: 1, pan: INITIAL_PAN })
+  // renderZoom: the zoom level at which the canvas is currently rendered
+  // zoom may differ during a gesture; cssScale = zoom / renderZoom bridges the gap
+  const renderZoomRef = useRef(1)
+  const [renderTransform, setRenderTransform] = useState({ zoom: 1, pan: INITIAL_PAN, renderZoom: 1 })
+
+  // Base size of the PDF at zoom=1 (used for SVG viewBox coordinate system)
+  const [baseSize, setBaseSize] = useState({ width: 0, height: 0 })
+  const rerenderTimerRef = useRef(null)
 
   // PDF document and page state
   const pdfDocRef = useRef(null)
@@ -31,7 +38,12 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
   function applyTransform(zoom, pan) {
     zoomRef.current = zoom
     panRef.current = pan
-    setRenderTransform({ zoom, pan })
+    setRenderTransform(prev => ({ ...prev, zoom, pan }))
+  }
+
+  function applyRenderZoom(rz) {
+    renderZoomRef.current = rz
+    setRenderTransform(prev => ({ ...prev, renderZoom: rz }))
   }
 
   // Calibration line
@@ -48,9 +60,11 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
   // Reset transform, page, and rotation when file changes
   useEffect(() => {
     applyTransform(1, INITIAL_PAN)
+    applyRenderZoom(1)
     setPageNum(1)
     setNumPages(0)
     setRotation(0)
+    setBaseSize({ width: 0, height: 0 })
     pdfDocRef.current = null
   }, [file])
 
@@ -72,29 +86,35 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
     return () => { cancelled = true }
   }, [file])
 
-  // Render current page whenever doc, pageNum, or rotation changes
+  // Render the current page at a given zoom level for crisp pixels
+  const renderPageAtZoom = useRef(null)
   useEffect(() => {
-    if (!pdfDocRef.current || numPages === 0) return
-    let cancelled = false
-
-    async function renderPage() {
+    renderPageAtZoom.current = async function(targetZoom) {
+      if (!pdfDocRef.current || numPages === 0) return
       const page = await pdfDocRef.current.getPage(pageNum)
-      if (cancelled) return
 
       const containerWidth = containerRef.current.clientWidth
       const viewport = page.getViewport({ scale: 1, rotation })
-      const scale = containerWidth / viewport.width
+      const baseScale = containerWidth / viewport.width
+      const scale = baseScale * targetZoom
       const scaledViewport = page.getViewport({ scale, rotation })
 
       const canvas = canvasRef.current
       canvas.width = scaledViewport.width
       canvas.height = scaledViewport.height
       setCanvasSize({ width: scaledViewport.width, height: scaledViewport.height })
+      setBaseSize({ width: scaledViewport.width / targetZoom, height: scaledViewport.height / targetZoom })
 
       await page.render({ canvasContext: canvas.getContext('2d'), viewport: scaledViewport }).promise
+      applyRenderZoom(targetZoom)
     }
+  })
 
-    renderPage()
+  // Re-render on page/rotation changes (at current zoom)
+  useEffect(() => {
+    if (!pdfDocRef.current || numPages === 0) return
+    let cancelled = false
+    renderPageAtZoom.current(zoomRef.current).catch(() => {})
     return () => { cancelled = true }
   }, [pageNum, numPages, rotation])
 
@@ -134,6 +154,11 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
         x: mx - (mx - panRef.current.x) * (newZoom / zoomRef.current),
         y: my - (my - panRef.current.y) * (newZoom / zoomRef.current),
       })
+      // Debounce the actual re-render so we get crisp pixels after zooming stops
+      clearTimeout(rerenderTimerRef.current)
+      rerenderTimerRef.current = setTimeout(() => {
+        renderPageAtZoom.current?.(zoomRef.current)
+      }, 250)
     }
     container.addEventListener('wheel', handleWheel, { passive: false })
     return () => container.removeEventListener('wheel', handleWheel)
@@ -163,13 +188,14 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
     }
   }
 
-  // Convert screen coords to canvas-space coords via the SVG's transformed bounding rect
+  // Convert screen coords to base-scale canvas coords using SVG's own transform
   function getSVGCoords(e) {
-    const rect = e.currentTarget.getBoundingClientRect()
-    return {
-      x: (e.clientX - rect.left) / zoomRef.current,
-      y: (e.clientY - rect.top) / zoomRef.current,
-    }
+    const svg = e.currentTarget
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const svgP = pt.matrixTransform(svg.getScreenCTM().inverse())
+    return { x: svgP.x, y: svgP.y }
   }
 
   // Calibration handlers
@@ -219,7 +245,7 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
     onPointAdd({ x, y })
   }
 
-  const { zoom, pan } = renderTransform
+  const { zoom, pan, renderZoom } = renderTransform
   const snapRadius = SNAP_SCREEN_PX / zoom
 
   // Is cursor near the first zone point (to show snap indicator)?
@@ -229,8 +255,11 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
     return Math.sqrt(dx * dx + dy * dy) <= snapRadius
   })()
 
+  // Canvas is rendered at renderZoom resolution. CSS scale bridges the gap
+  // to the current visual zoom so panning feels instant while re-render catches up.
+  const cssScale = renderZoom > 0 ? zoom / renderZoom : 1
   const wrapperStyle = {
-    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+    transform: `translate(${pan.x}px, ${pan.y}px) scale(${cssScale})`,
     transformOrigin: 'top left',
   }
 
@@ -264,6 +293,7 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
 
         <svg
           className="drawing-overlay"
+          viewBox={`0 0 ${baseSize.width} ${baseSize.height}`}
           width={canvasSize.width}
           height={canvasSize.height}
           style={{ pointerEvents: svgActive ? 'all' : 'none', cursor: svgActive ? 'crosshair' : 'default' }}
