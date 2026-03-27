@@ -113,9 +113,7 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
   // Re-render on page/rotation changes (at current zoom)
   useEffect(() => {
     if (!pdfDocRef.current || numPages === 0) return
-    let cancelled = false
     renderPageAtZoom.current(zoomRef.current).catch(() => {})
-    return () => { cancelled = true }
   }, [pageNum, numPages, rotation])
 
   function goToPrevPage() {
@@ -164,8 +162,15 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
     return () => container.removeEventListener('wheel', handleWheel)
   }, [])
 
-  // Container mouse handlers (pan only — disabled while drawing)
+  // Container mouse handlers — left-click pans normally; right-click always pans
   function handleContainerMouseDown(e) {
+    if (e.button === 2) {
+      // Right-click drag: pan even while drawing/calibrating
+      dragging.current = true
+      lastMouse.current = { x: e.clientX, y: e.clientY }
+      containerRef.current.style.cursor = 'grabbing'
+      return
+    }
     if (calibrating || drawingZone) return
     dragging.current = true
     lastMouse.current = { x: e.clientX, y: e.clientY }
@@ -274,6 +279,7 @@ function PdfCanvas({ file, calibrating, onLineDrawn, zones, drawingZone, activeP
       onMouseMove={handleContainerMouseMove}
       onMouseUp={stopDrag}
       onMouseLeave={stopDrag}
+      onContextMenu={e => e.preventDefault()}
     >
       {numPages > 0 && (
         <div className="page-nav">
