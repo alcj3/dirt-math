@@ -18,7 +18,7 @@ function Sidebar({
   unit, onUnitChange,
   calibrating, calibrationLinePx, pixelsPerFoot,
   onCalibrateStart, onScaleConfirm,
-  zones, drawingZone, onDrawZoneToggle, onDeleteZone,
+  zones, drawingZone, onDrawZoneToggle, onDeleteZone, onClearZones,
 }) {
   const fileInputRef = useRef(null)
   const [lengthInput, setLengthInput] = useState('')
@@ -146,7 +146,10 @@ function Sidebar({
 
           {zones.length > 0 && (
             <div className="sidebar-section">
-              <span className="sidebar-label">Zones</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="sidebar-label">Zones</span>
+                <button className="btn-ghost" onClick={onClearZones}>Clear all</button>
+              </div>
               <div className="zone-list">
                 {zones.map(zone => {
                   const area = formatArea(zone.points)

@@ -80,6 +80,12 @@ function App() {
     })
   }
 
+  function clearZones() {
+    setZones([])
+    setActivePoints([])
+    setDrawingZone(false)
+  }
+
   function handlePageChange() {
     setZones([])
     setCalibrating(false)
@@ -105,6 +111,7 @@ function App() {
         drawingZone={drawingZone}
         onDrawZoneToggle={toggleDrawZone}
         onDeleteZone={deleteZone}
+        onClearZones={clearZones}
       />
       <main className="canvas-area">
         {file
